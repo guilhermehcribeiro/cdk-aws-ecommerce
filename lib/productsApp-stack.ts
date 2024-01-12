@@ -26,7 +26,7 @@ export class ProductsAppStack extends cdk.Stack {
       writeCapacity: 1,
     });
 
-    const productsLayerArn = ssm.StringListParameter.valueForTypedListParameter(
+    const productsLayerArn = ssm.StringParameter.valueForStringParameter(
       this,
       "ProductsLayerVersionArn"
     );
@@ -34,7 +34,7 @@ export class ProductsAppStack extends cdk.Stack {
     const productsLayer = lambda.LayerVersion.fromLayerVersionArn(
       this,
       "ProductsLayerVersionArn",
-      productsLayerArn[0]
+      productsLayerArn
     );
 
     this.productsFetchHandler = new lambdaNodeJS.NodejsFunction(
@@ -44,7 +44,7 @@ export class ProductsAppStack extends cdk.Stack {
         functionName: "ProductsFetchFunction",
         entry: "lambda/products/productsFetchFunction.ts",
         handler: "handler",
-        memorySize: 128,
+        memorySize: 512,
         timeout: cdk.Duration.seconds(5),
         bundling: {
           minify: true,
@@ -54,6 +54,7 @@ export class ProductsAppStack extends cdk.Stack {
           PRODUCTS_DDB: this.productsDdb.tableName,
         },
         layers: [productsLayer],
+        runtime: lambda.Runtime.NODEJS_20_X,
       }
     );
 
@@ -66,7 +67,7 @@ export class ProductsAppStack extends cdk.Stack {
         functionName: "ProductsAdminFunction",
         entry: "lambda/products/productsAdminFunction.ts",
         handler: "handler",
-        memorySize: 128,
+        memorySize: 512,
         timeout: cdk.Duration.seconds(5),
         bundling: {
           minify: true,
@@ -76,6 +77,7 @@ export class ProductsAppStack extends cdk.Stack {
           PRODUCTS_DDB: this.productsDdb.tableName,
         },
         layers: [productsLayer],
+        runtime: lambda.Runtime.NODEJS_20_X,
       }
     );
 

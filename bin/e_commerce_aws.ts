@@ -21,14 +21,14 @@ const productsAppLayersStack = new ProductsAppLayersStack(
   app,
   "ProductsAppLayers",
   {
-    tags,
-    env,
+    tags: tags,
+    env: env,
   }
 );
 
 const productsAppStack = new ProductsAppStack(app, "ProductsApp", {
-  tags,
-  env,
+  tags: tags,
+  env: env,
 });
 
 productsAppStack.addDependency(productsAppLayersStack);
