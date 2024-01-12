@@ -26,7 +26,7 @@ export class ProductsAppStack extends cdk.Stack {
       writeCapacity: 1,
     });
 
-    const productsLayerArn = ssm.StringListParameter.valueForTypedListParameter(
+    const productsLayerArn = ssm.StringParameter.valueForStringParameter(
       this,
       "ProductsLayerVersionArn"
     );
@@ -34,7 +34,7 @@ export class ProductsAppStack extends cdk.Stack {
     const productsLayer = lambda.LayerVersion.fromLayerVersionArn(
       this,
       "ProductsLayerVersionArn",
-      productsLayerArn[0]
+      productsLayerArn
     );
 
     this.productsFetchHandler = new lambdaNodeJS.NodejsFunction(

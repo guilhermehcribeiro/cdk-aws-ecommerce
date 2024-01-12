@@ -11,14 +11,14 @@ export class ProductsAppLayersStack extends cdk.Stack {
 
     this.productsLayers = new lambda.LayerVersion(this, "ProductsLayer", {
       code: lambda.Code.fromAsset("lambda/products/layers/productsLayer"),
-      compatibleRuntimes: [lambda.Runtime.NODEJS_18_X],
+      compatibleRuntimes: [lambda.Runtime.NODEJS_20_X],
       layerVersionName: "ProductsLayer",
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    new ssm.StringListParameter(this, "ProductsLayerVersionArn", {
+    new ssm.StringParameter(this, "ProductsLayerVersionArn", {
       parameterName: "ProductsLayerVersionArn",
-      stringListValue: [this.productsLayers.layerVersionArn],
+      stringValue: this.productsLayers.layerVersionArn,
     });
   }
 }
