@@ -1,8 +1,8 @@
 import * as cdk from "aws-cdk-lib";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as lambdaNodeJS from "aws-cdk-lib/aws-lambda-nodejs";
 import * as ssm from "aws-cdk-lib/aws-ssm";
-import * as lambda from "aws-cdk-lib/aws-lambda";
 
 import { Construct } from "constructs";
 
@@ -55,6 +55,8 @@ export class ProductsAppStack extends cdk.Stack {
         },
         layers: [productsLayer],
         runtime: lambda.Runtime.NODEJS_20_X,
+        tracing: lambda.Tracing.ACTIVE,
+        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
       }
     );
 
@@ -78,6 +80,8 @@ export class ProductsAppStack extends cdk.Stack {
         },
         layers: [productsLayer],
         runtime: lambda.Runtime.NODEJS_20_X,
+        tracing: lambda.Tracing.ACTIVE,
+        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
       }
     );
 
