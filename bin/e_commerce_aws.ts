@@ -5,6 +5,8 @@ import { ECommerceApiStack } from "../lib/ecommerceApi-stack";
 import { ProductsAppStack } from "../lib/productsApp-stack";
 import { ProductsAppLayersStack } from "../lib/productsAppLayers-stack";
 import { EventsDdbStack } from "../lib/eventsDdb-stacks";
+import { OrdersAppLayersStack } from "../lib/ordersAppLayers-stack";
+import { OrdersAppStack } from "../lib/ordersApp-stack";
 
 const app = new cdk.App();
 
@@ -18,34 +20,43 @@ const tags = {
   team: "GuilhermeRibeiro",
 };
 
+const setTagEnv = { tags, env };
+
 const productsAppLayersStack = new ProductsAppLayersStack(
   app,
   "ProductsAppLayers",
   {
-    tags: tags,
-    env: env,
+    ...setTagEnv,
   }
 );
 
 const eventsDdbStack = new EventsDdbStack(app, "EventsDdb", {
-  tags: tags,
-  env: env,
+  ...setTagEnv,
 });
 
 const productsAppStack = new ProductsAppStack(app, "ProductsApp", {
-  tags: tags,
-  env: env,
+  ...setTagEnv,
   eventsDdb: eventsDdbStack.table,
 });
-
 productsAppStack.addDependency(productsAppLayersStack);
 productsAppStack.addDependency(eventsDdbStack);
+
+const ordersAppLayersStack = new OrdersAppLayersStack(app, "OrdersAppLayers", {
+  ...setTagEnv,
+});
+
+const ordersAppStack = new OrdersAppStack(app, "OrdersApp", {
+  ...setTagEnv,
+  productDdb: productsAppStack.productsDdb,
+});
+ordersAppStack.addDependency(productsAppStack);
+ordersAppStack.addDependency(ordersAppLayersStack);
 
 const eCommerceApiStack = new ECommerceApiStack(app, "ECommerceApi", {
   productsFetchHandler: productsAppStack.productsFetchHandler,
   productsAdminHandler: productsAppStack.productsAdminHandler,
-  tags,
-  env,
+  ordersHandler: ordersAppStack.ordersHandler,
+  ...setTagEnv,
 });
-
 eCommerceApiStack.addDependency(productsAppStack);
+eCommerceApiStack.addDependency(ordersAppStack);

@@ -25,7 +25,7 @@ export async function handler(
   const apiRequestId = event.requestContext.requestId;
 
   console.log(
-    `API Gateway RequestId: ${apiRequestId} - Lambad RequestId: ${lambdaRequestId}`
+    `API Gateway RequestId: ${apiRequestId} - Lambda RequestId: ${lambdaRequestId}`
   );
 
   const method = event.httpMethod;
