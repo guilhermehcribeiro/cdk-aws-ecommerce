@@ -6,12 +6,16 @@ import * as ssm from "aws-cdk-lib/aws-ssm";
 
 import { Construct } from "constructs";
 
+interface ProductsAppStackProps extends cdk.StackProps {
+  eventsDdb: dynamodb.Table;
+}
+
 export class ProductsAppStack extends cdk.Stack {
   readonly productsFetchHandler: lambdaNodeJS.NodejsFunction;
   readonly productsAdminHandler: lambdaNodeJS.NodejsFunction;
   readonly productsDdb: dynamodb.Table;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: ProductsAppStackProps) {
     super(scope, id, props);
 
     this.productsDdb = new dynamodb.Table(this, "ProductsDdb", {
@@ -36,6 +40,42 @@ export class ProductsAppStack extends cdk.Stack {
       "ProductsLayerVersionArn",
       productsLayerArn
     );
+
+    const productEventsLayerArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      "ProductEventsLayerVersionArn"
+    );
+
+    const productEventsLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      "ProductEventsLayerVersionArn",
+      productEventsLayerArn
+    );
+
+    const productEventsHandler = new lambdaNodeJS.NodejsFunction(
+      this,
+      "ProductsEventsFunction",
+      {
+        functionName: "ProductEventsFunction",
+        entry: "lambda/products/productEventsFunction.ts",
+        handler: "handler",
+        memorySize: 512,
+        timeout: cdk.Duration.seconds(2),
+        bundling: {
+          minify: true,
+          sourceMap: false,
+        },
+        environment: {
+          EVENTS_DDB: props.eventsDdb.tableName,
+        },
+        layers: [productEventsLayer],
+        runtime: lambda.Runtime.NODEJS_20_X,
+        tracing: lambda.Tracing.ACTIVE,
+        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
+      }
+    );
+
+    props.eventsDdb.grantWriteData(productEventsHandler);
 
     this.productsFetchHandler = new lambdaNodeJS.NodejsFunction(
       this,
@@ -77,8 +117,9 @@ export class ProductsAppStack extends cdk.Stack {
         },
         environment: {
           PRODUCTS_DDB: this.productsDdb.tableName,
+          PRODUCT_EVENTS_FUNCTION_NAME: productEventsHandler.functionName,
         },
-        layers: [productsLayer],
+        layers: [productsLayer, productEventsLayer],
         runtime: lambda.Runtime.NODEJS_20_X,
         tracing: lambda.Tracing.ACTIVE,
         insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
@@ -86,5 +127,6 @@ export class ProductsAppStack extends cdk.Stack {
     );
 
     this.productsDdb.grantWriteData(this.productsAdminHandler);
+    productEventsHandler.grantInvoke(this.productsAdminHandler);
   }
 }

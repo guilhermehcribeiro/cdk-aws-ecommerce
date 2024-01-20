@@ -3,15 +3,20 @@ import {
   APIGatewayProxyResult,
   Context,
 } from "aws-lambda";
-import { DynamoDB } from "aws-sdk";
+import { DynamoDB, Lambda } from "aws-sdk";
 import * as AWSXRay from "aws-xray-sdk";
 import { Product, ProductRepository } from "/opt/nodejs/productsLayer";
+import { ProductEvent, ProductEventType } from "/opt/nodejs/productEventsLayer";
 
 AWSXRay.captureAWS(require("aws-sdk"));
 
 const productsDdb = process.env.PRODUCTS_DDB!;
+const productEventsFunctionName = process.env.PRODUCT_EVENTS_FUNCTION_NAME!;
 const ddbClient = new DynamoDB.DocumentClient();
+const lambdaClient = new Lambda();
 const productRepository = new ProductRepository(ddbClient, productsDdb);
+
+const userEmail = "teste@example.com";
 export async function handler(
   event: APIGatewayProxyEvent,
   context: Context
@@ -29,6 +34,14 @@ export async function handler(
     console.log("POST /products");
     const product = JSON.parse(event.body!) as Product;
     const newProduct = await productRepository.createProduct(product);
+    const response = await sendProductEvent(
+      newProduct,
+      ProductEventType.CREATED,
+      userEmail,
+      lambdaRequestId
+    );
+
+    console.log(response);
 
     return {
       statusCode: 201,
@@ -44,6 +57,16 @@ export async function handler(
           productId,
           product
         );
+
+        const response = await sendProductEvent(
+          updatedProduct,
+          ProductEventType.UPDATED,
+          userEmail,
+          lambdaRequestId
+        );
+
+        console.log(response);
+
         return {
           statusCode: 200,
           body: JSON.stringify(updatedProduct),
@@ -60,6 +83,14 @@ export async function handler(
       console.log(`DELETE /products/${productId}`);
       try {
         const product = await productRepository.deleteProduct(productId);
+        const response = await sendProductEvent(
+          product,
+          ProductEventType.DELETED,
+          userEmail,
+          lambdaRequestId
+        );
+
+        console.log(response);
         return {
           statusCode: 200,
           body: JSON.stringify(product),
@@ -82,4 +113,28 @@ export async function handler(
       message: "Bad Request",
     }),
   };
+}
+
+function sendProductEvent(
+  product: Product,
+  eventType: ProductEventType,
+  email: string,
+  lambdaRequestId: string
+) {
+  const event: ProductEvent = {
+    email: email,
+    eventType: eventType,
+    productCode: product.code,
+    productId: product.id,
+    productPrice: product.price,
+    requestId: lambdaRequestId,
+  };
+
+  return lambdaClient
+    .invoke({
+      FunctionName: productEventsFunctionName,
+      Payload: JSON.stringify(event),
+      InvocationType: "Event", //RequestResponse
+    })
+    .promise();
 }
