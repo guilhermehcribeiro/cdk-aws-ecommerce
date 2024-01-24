@@ -49,7 +49,45 @@ export class ECommerceApiStack extends cdk.Stack {
 
     const ordersResource = api.root.addResource("orders");
     ordersResource.addMethod("GET", ordersIntegration);
-    ordersResource.addMethod("POST", ordersIntegration);
+    const orderRequestValidator = new apiGateway.RequestValidator(
+      this,
+      "OrderRequestValidator",
+      {
+        restApi: api,
+        requestValidatorName: "OrderRequestValidator",
+        validateRequestBody: true,
+      }
+    );
+    const orderModel = new apiGateway.Model(this, "OrderModel", {
+      modelName: "OrderModel",
+      restApi: api,
+      schema: {
+        type: apiGateway.JsonSchemaType.OBJECT,
+        properties: {
+          email: {
+            type: apiGateway.JsonSchemaType.STRING,
+          },
+          productsIds: {
+            type: apiGateway.JsonSchemaType.ARRAY,
+            minItems: 1,
+            items: {
+              type: apiGateway.JsonSchemaType.STRING,
+            },
+          },
+          payment: {
+            type: apiGateway.JsonSchemaType.STRING,
+            enum: ["CASH", "DEBIT_CARD", "CREDIT_CARD"],
+          },
+        },
+        required: ["email", "productsIds", "payment"],
+      },
+    });
+    ordersResource.addMethod("POST", ordersIntegration, {
+      requestValidator: orderRequestValidator,
+      requestModels: {
+        "application/json": orderModel,
+      },
+    });
 
     const orderDeleteValidation = new apiGateway.RequestValidator(
       this,
@@ -87,8 +125,53 @@ export class ECommerceApiStack extends cdk.Stack {
       props.productsAdminHandler
     );
 
-    productsResource.addMethod("POST", productsAdminIntegration);
-    productIdResource.addMethod("PUT", productsAdminIntegration);
+    const productRequestValidator = new apiGateway.RequestValidator(
+      this,
+      "ProductRequestValidator",
+      {
+        restApi: api,
+        requestValidatorName: "ProductRequestValidator",
+        validateRequestBody: true,
+      }
+    );
+    const productModel = new apiGateway.Model(this, "ProductModel", {
+      modelName: "ProductModel",
+      restApi: api,
+      schema: {
+        type: apiGateway.JsonSchemaType.OBJECT,
+        properties: {
+          model: {
+            type: apiGateway.JsonSchemaType.STRING,
+          },
+          productUrl: {
+            type: apiGateway.JsonSchemaType.STRING,
+          },
+          code: {
+            type: apiGateway.JsonSchemaType.STRING,
+          },
+          price: {
+            type: apiGateway.JsonSchemaType.NUMBER,
+          },
+          productName: {
+            type: apiGateway.JsonSchemaType.STRING,
+          },
+        },
+        required: ["code", "productName"],
+      },
+    });
+
+    productsResource.addMethod("POST", productsAdminIntegration, {
+      requestValidator: productRequestValidator,
+      requestModels: {
+        "application/json": productModel,
+      },
+    });
+    productIdResource.addMethod("PUT", productsAdminIntegration, {
+      requestValidator: productRequestValidator,
+      requestModels: {
+        "application/json": productModel,
+      },
+    });
     productIdResource.addMethod("DELETE", productsAdminIntegration);
   }
 }
