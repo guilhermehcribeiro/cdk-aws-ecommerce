@@ -98,7 +98,7 @@ export async function handler(
       } catch (error) {
         console.error((<Error>error).message);
         return {
-          statusCode: 200,
+          statusCode: 404,
           body: JSON.stringify({
             message: (<Error>error).message,
           }),

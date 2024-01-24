@@ -40,26 +40,81 @@ export async function handler(
   );
 
   if (method === "GET") {
+    let data: Order | Order[];
     if (event.queryStringParameters) {
-      const email = event.queryStringParameters!.email;
-      const orderId = event.queryStringParameters!.orderId;
+      const email = event.queryStringParameters.email!;
+      const orderId = event.queryStringParameters.orderId!;
 
       if (email && orderId) {
+        try {
+          data = await orderRepository.getOrder(email, orderId);
+        } catch (error) {
+          console.error((<Error>error).message);
+          return {
+            statusCode: 404,
+            body: JSON.stringify({
+              message: (<Error>error).message,
+            }),
+          };
+        }
       } else {
+        data = await orderRepository.getOrdersByEmail(email);
       }
     } else {
+      data = await orderRepository.getAllOrders();
     }
+
+    const convertedOrder = Array.isArray(data)
+      ? data.map(convertToOrderResponse)
+      : convertToOrderResponse(data);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify(convertedOrder),
+    };
   } else if (method === "POST") {
     console.log("POST /orders");
     const orderRequest = JSON.parse(event.body!) as OrderRequest;
     const products = await productRepository.getProductsByIds(
       orderRequest.productsIds
     );
-    // stopped here CLASS 112
+    if (products?.length !== orderRequest.productsIds.length) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({
+          message: "Some product was not found",
+        }),
+      };
+    }
+
+    const order = buildOrder(orderRequest, products);
+    const createdOrder = await orderRepository.createOrder(order);
+
+    return {
+      statusCode: 201,
+      body: JSON.stringify(convertToOrderResponse(createdOrder)),
+    };
   } else if (method === "DELETE") {
     console.log("DELETE /orders");
-    const email = event.queryStringParameters!.email;
-    const orderId = event.queryStringParameters!.orderId;
+    const email = event.queryStringParameters!.email!;
+    const orderId = event.queryStringParameters!.orderId!;
+
+    try {
+      const deletedOrder = await orderRepository.deleteOrder(email, orderId);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify(convertToOrderResponse(deletedOrder)),
+      };
+    } catch (error) {
+      console.error((<Error>error).message);
+      return {
+        statusCode: 404,
+        body: JSON.stringify({
+          message: (<Error>error).message,
+        }),
+      };
+    }
   }
 
   return {
