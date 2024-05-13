@@ -1,6 +1,11 @@
-import { DynamoDB } from "aws-sdk";
+import { DynamoDB, SNS } from "aws-sdk";
 import { Order, OrderProduct, OrderRepository } from "/opt/nodejs/ordersLayer";
 import { Product, ProductRepository } from "/opt/nodejs/productsLayer";
+import {
+  OrderEvent,
+  OrderEventType,
+  Envelop,
+} from "/opt/nodejs/orderEventsLayer";
 
 import * as AWSXRay from "aws-xray-sdk";
 import {
@@ -21,8 +26,10 @@ AWSXRay.captureAWS(require("aws-sdk"));
 
 const ordersDdb = process.env.ORDERS_DDB!;
 const productsDdb = process.env.PRODUCTS_DDB!;
+const orderEventsTopicArn = process.env.ORDER_EVENTS_TOPIC_ARN!;
 
 const ddbClient = new DynamoDB.DocumentClient();
+const snsClient = new SNS();
 
 const orderRepository = new OrderRepository(ddbClient, ordersDdb);
 const productRepository = new ProductRepository(ddbClient, productsDdb);
@@ -89,7 +96,15 @@ export async function handler(
 
     const order = buildOrder(orderRequest, products);
     const createdOrder = await orderRepository.createOrder(order);
-
+    const eventResult = await sendOrderEvent(
+      createdOrder,
+      OrderEventType.CREATED,
+      lambdaRequestId
+    );
+    console.log(
+      `Order created event sent - OrderId: ${createdOrder.sk} - MessageId: ${eventResult.MessageId}`,
+      eventResult
+    );
     return {
       statusCode: 201,
       body: JSON.stringify(convertToOrderResponse(createdOrder)),
@@ -101,7 +116,15 @@ export async function handler(
 
     try {
       const deletedOrder = await orderRepository.deleteOrder(email, orderId);
-
+      const eventResult = await sendOrderEvent(
+        deletedOrder,
+        OrderEventType.DELETED,
+        lambdaRequestId
+      );
+      console.log(
+        `Order deleted event sent - OrderId: ${deletedOrder.sk} - MessageId: ${eventResult.MessageId}`,
+        eventResult
+      );
       return {
         statusCode: 200,
         body: JSON.stringify(convertToOrderResponse(deletedOrder)),
@@ -123,6 +146,38 @@ export async function handler(
       message: "Bad Request",
     }),
   };
+}
+
+function sendOrderEvent(
+  order: Order,
+  eventType: OrderEventType,
+  lambdaRequestId: string
+) {
+  const productCodes = order.products.map((product) => product.code);
+  const orderEvent: OrderEvent = {
+    email: order.pk,
+    orderId: order.sk!,
+    billing: {
+      payment: order.billing.payment,
+      totalPrice: order.billing.totalPrice,
+    },
+    shipping: {
+      carrier: order.shipping.carrier,
+      type: order.shipping.type,
+    },
+    requestId: lambdaRequestId,
+    productCodes: productCodes,
+  };
+  const envelop: Envelop = {
+    eventType,
+    data: JSON.stringify(orderEvent),
+  };
+  return snsClient
+    .publish({
+      TopicArn: orderEventsTopicArn,
+      Message: JSON.stringify(envelop),
+    })
+    .promise();
 }
 
 function buildOrder(orderRequest: OrderRequest, products: Product[]): Order {
