@@ -21,6 +21,7 @@ import {
   PaymentType,
   ShippingType,
 } from "/opt/nodejs/ordersApiLayer";
+import { v4 as uuid } from "uuid";
 
 AWSXRay.captureAWS(require("aws-sdk"));
 
@@ -95,19 +96,25 @@ export async function handler(
     }
 
     const order = buildOrder(orderRequest, products);
-    const createdOrder = await orderRepository.createOrder(order);
-    const eventResult = await sendOrderEvent(
-      createdOrder,
+    const createdOrderPromise = orderRepository.createOrder(order);
+    const eventResultPromise = sendOrderEvent(
+      order,
       OrderEventType.CREATED,
       lambdaRequestId
     );
+
+    const results = await Promise.all([
+      createdOrderPromise,
+      eventResultPromise,
+    ]);
+
     console.log(
-      `Order created event sent - OrderId: ${createdOrder.sk} - MessageId: ${eventResult.MessageId}`,
-      eventResult
+      `Order created event sent - OrderId: ${order.sk} - MessageId: ${results[1].MessageId}`,
+      results[1]
     );
     return {
       statusCode: 201,
-      body: JSON.stringify(convertToOrderResponse(createdOrder)),
+      body: JSON.stringify(convertToOrderResponse(order)),
     };
   } else if (method === "DELETE") {
     console.log("DELETE /orders");
@@ -194,6 +201,8 @@ function buildOrder(orderRequest: OrderRequest, products: Product[]): Order {
 
   return {
     pk: orderRequest.email,
+    sk: uuid(),
+    createdAt: Date.now(),
     billing: {
       payment: orderRequest.payment,
       totalPrice: totalPrice,
