@@ -183,6 +183,12 @@ function sendOrderEvent(
     .publish({
       TopicArn: orderEventsTopicArn,
       Message: JSON.stringify(envelop),
+      MessageAttributes: {
+        eventType: {
+          DataType: "String",
+          StringValue: eventType,
+        },
+      },
     })
     .promise();
 }
