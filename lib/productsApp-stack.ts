@@ -4,6 +4,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as lambdaNodeJS from "aws-cdk-lib/aws-lambda-nodejs";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as sqs from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 
 interface ProductsAppStackProps extends cdk.StackProps {
@@ -52,6 +53,13 @@ export class ProductsAppStack extends cdk.Stack {
       productEventsLayerArn
     );
 
+    const productEventsDlq = new sqs.Queue(this, "ProductEventsDlq", {
+      queueName: "product-events-dql",
+      enforceSSL: false,
+      encryption: sqs.QueueEncryption.UNENCRYPTED,
+      retentionPeriod: cdk.Duration.days(10),
+    });
+
     const productEventsHandler = new lambdaNodeJS.NodejsFunction(
       this,
       "ProductsEventsFunction",
@@ -72,6 +80,8 @@ export class ProductsAppStack extends cdk.Stack {
         runtime: lambda.Runtime.NODEJS_20_X,
         tracing: lambda.Tracing.ACTIVE,
         insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
+        deadLetterQueueEnabled: true,
+        deadLetterQueue: productEventsDlq,
       }
     );
 
