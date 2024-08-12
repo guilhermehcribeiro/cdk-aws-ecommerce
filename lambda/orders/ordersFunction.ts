@@ -160,7 +160,7 @@ function sendOrderEvent(
   eventType: OrderEventType,
   lambdaRequestId: string
 ) {
-  const productCodes = order.products.map((product) => product.code);
+  const productCodes = order.products?.map((product) => product.code) || [];
   const orderEvent: OrderEvent = {
     email: order.pk,
     orderId: order.sk!,
@@ -223,7 +223,7 @@ function buildOrder(orderRequest: OrderRequest, products: Product[]): Order {
 
 function convertToOrderResponse(order: Order): OrderResponse {
   const orderProducts: OrderProductResponse[] = [];
-  order.products.forEach((product) => {
+  order.products?.forEach((product) => {
     orderProducts.push({
       code: product.code,
       price: product.price,
@@ -234,7 +234,7 @@ function convertToOrderResponse(order: Order): OrderResponse {
     email: order.pk,
     id: order.sk!,
     createdAt: order.createdAt!,
-    products: orderProducts,
+    products: orderProducts.length > 0 ? orderProducts : undefined,
     billing: {
       payment: order.billing.payment as PaymentType,
       totalPrice: order.billing.totalPrice,
