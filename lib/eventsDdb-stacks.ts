@@ -24,11 +24,12 @@ export class EventsDdbStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       timeToLiveAttribute: "ttl",
-      billingMode: dynamodb.BillingMode.PROVISIONED,
-      readCapacity: 1,
-      writeCapacity: 1,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      // readCapacity: 1,
+      // writeCapacity: 1,
     });
 
+    /**
     const readScale = this.table.autoScaleReadCapacity({
       maxCapacity: 2,
       minCapacity: 1,
@@ -50,5 +51,6 @@ export class EventsDdbStack extends cdk.Stack {
       scaleInCooldown: cdk.Duration.seconds(60),
       scaleOutCooldown: cdk.Duration.seconds(60),
     });
+     */
   }
 }
