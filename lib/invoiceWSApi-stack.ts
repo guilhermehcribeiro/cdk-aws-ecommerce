@@ -172,7 +172,7 @@ export class InvoiceWSApiStack extends cdk.Stack {
       resources: [invoicesDdb.tableArn],
       conditions: {
         ["ForAllValues:StringLike"]: {
-          "dynamodb:LeadingKeys": ["#transaction_*"],
+          "dynamodb:LeadingKeys": ["#transaction"],
         },
       },
     });
@@ -255,7 +255,7 @@ export class InvoiceWSApiStack extends cdk.Stack {
       resources: [invoicesDdb.tableArn],
       conditions: {
         ["ForAllValues:StringLike"]: {
-          "dynamodb:LeadingKeys": ["#transaction_*"],
+          "dynamodb:LeadingKeys": ["#transaction"],
         },
       },
     });
