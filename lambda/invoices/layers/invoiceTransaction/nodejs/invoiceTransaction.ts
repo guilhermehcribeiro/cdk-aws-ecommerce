@@ -7,6 +7,7 @@ export enum InvoiceTransactionStatus {
   TIMEOUT = "TIMEOUT",
   CANCELLED = "INVOICE_CANCELLED",
   NON_VALID_INVOICE_NUMBER = "NON_VALID_INVOICE_NUMBER",
+  NOT_FOUND = "INVOICE_NOT_FOUND",
 }
 export interface InvoiceTransaction {
   pk: string;

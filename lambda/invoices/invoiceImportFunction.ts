@@ -78,6 +78,29 @@ async function processRecord(record: S3EventRecord) {
     const invoice = JSON.parse(object.Body!.toString("utf-8")) as InvoiceFile;
     console.log(invoice);
 
+    if (invoice.invoiceNumber.toString().length < 5) {
+      const sendInvoiceStatusPromise = invoiceWSService.sendInvoiceStatus(
+        key,
+        invoiceTransaction.connectionId,
+        InvoiceTransactionStatus.NON_VALID_INVOICE_NUMBER
+      );
+
+      const updateInvoiceStatusPromise =
+        invoiceTransactionRepository.updateInvoiceTransaction(
+          key,
+          InvoiceTransactionStatus.NON_VALID_INVOICE_NUMBER
+        );
+
+      await Promise.all([sendInvoiceStatusPromise, updateInvoiceStatusPromise]);
+
+      await invoiceWSService.disconnectionClient(
+        invoiceTransaction.connectionId
+      );
+
+      console.error("Non valid invoice number");
+      return;
+    }
+
     const createInvoicePromise = invoiceRepository.create({
       pk: `#invoice_${invoice.customerName}`,
       sk: invoice.invoiceNumber,
