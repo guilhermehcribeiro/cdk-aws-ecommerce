@@ -1,5 +1,5 @@
 import { Context, S3Event, S3EventRecord } from "aws-lambda";
-import { ApiGatewayManagementApi, DynamoDB, S3 } from "aws-sdk";
+import { ApiGatewayManagementApi, DynamoDB, EventBridge, S3 } from "aws-sdk";
 import * as AWSXRay from "aws-xray-sdk";
 import {
   InvoiceTransactionRepository,
@@ -12,9 +12,11 @@ AWSXRay.captureAWS(require("aws-sdk"));
 
 const invoiceDdb = process.env.INVOICES_DDB!;
 const invoicesWsApiEndpoint = process.env.INVOICE_WSAPI_ENDPOINT!.substring(6);
+const auditBusName = process.env.AUDIT_BUS_NAME!;
 
 const s3Client = new S3();
 const ddbClient = new DynamoDB.DocumentClient();
+const eventBridgeClient = new EventBridge();
 const apigwManagementApi = new ApiGatewayManagementApi({
   endpoint: invoicesWsApiEndpoint,
 });
@@ -53,6 +55,9 @@ async function processRecord(record: S3EventRecord) {
         invoiceTransaction.transactionStatus
       );
       console.error("Non valid transaction status");
+      await invoiceWSService.disconnectionClient(
+        invoiceTransaction.connectionId
+      );
       return;
     }
 
@@ -79,6 +84,26 @@ async function processRecord(record: S3EventRecord) {
     console.log(invoice);
 
     if (invoice.invoiceNumber.toString().length < 5) {
+      const putEventPromise = eventBridgeClient
+        .putEvents({
+          Entries: [
+            {
+              Source: "app.invoice",
+              EventBusName: auditBusName,
+              DetailType: "invoice",
+              Time: new Date(),
+              Detail: JSON.stringify({
+                errorDetail: "FAIL_NO_INVOICE_NUMBER",
+                info: {
+                  invoiceKey: key,
+                  customerName: invoice.customerName,
+                },
+              }),
+            },
+          ],
+        })
+        .promise();
+
       const sendInvoiceStatusPromise = invoiceWSService.sendInvoiceStatus(
         key,
         invoiceTransaction.connectionId,
@@ -91,13 +116,21 @@ async function processRecord(record: S3EventRecord) {
           InvoiceTransactionStatus.NON_VALID_INVOICE_NUMBER
         );
 
-      await Promise.all([sendInvoiceStatusPromise, updateInvoiceStatusPromise]);
+      await Promise.all([
+        sendInvoiceStatusPromise,
+        updateInvoiceStatusPromise,
+        putEventPromise,
+      ]);
 
       await invoiceWSService.disconnectionClient(
         invoiceTransaction.connectionId
       );
 
       console.error("Non valid invoice number");
+
+      await invoiceWSService.disconnectionClient(
+        invoiceTransaction.connectionId
+      );
       return;
     }
 
@@ -137,6 +170,8 @@ async function processRecord(record: S3EventRecord) {
       updateInvoicePromise,
       sendStatusPromise,
     ]);
+
+    await invoiceWSService.disconnectionClient(invoiceTransaction.connectionId);
   } catch (error) {
     console.error((<Error>error).message);
   }
