@@ -89,6 +89,8 @@ export async function handler(
       orderRequest.productsIds
     );
     if (products?.length !== orderRequest.productsIds.length) {
+      console.error("Some product was not found");
+
       const result = await eventBridgeClient
         .putEvents({
           Entries: [
@@ -107,6 +109,7 @@ export async function handler(
         .promise();
 
       console.log(result);
+
       return {
         statusCode: 404,
         body: JSON.stringify({

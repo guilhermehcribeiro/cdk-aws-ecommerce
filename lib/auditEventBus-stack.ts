@@ -4,6 +4,7 @@ import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as lambdaNodeJS from "aws-cdk-lib/aws-lambda-nodejs";
 import * as sqs from "aws-cdk-lib/aws-sqs";
+import * as cw from "aws-cdk-lib/aws-cloudwatch";
 import { Construct } from "constructs";
 
 export class AuditEventBusStack extends cdk.Stack {
@@ -122,5 +123,38 @@ export class AuditEventBusStack extends cdk.Stack {
     timeoutImportInvoiceRule.addTarget(
       new targets.SqsQueue(invoiceImportTimeoutQueue)
     );
+
+    //Metric
+    const numberOfMessagesMetric =
+      invoiceImportTimeoutQueue.metricApproximateNumberOfMessagesVisible({
+        period: cdk.Duration.minutes(2),
+        statistic: "Sum",
+      });
+
+    //Alarm
+    numberOfMessagesMetric.createAlarm(this, "InvoiceImportTimeoutAlarm", {
+      alarmName: "InvoiceImportTimeout",
+      actionsEnabled: false,
+      evaluationPeriods: 1,
+      threshold: 5,
+      comparisonOperator:
+        cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+    });
+
+    const ageOfMessagesMetric =
+      invoiceImportTimeoutQueue.metricApproximateAgeOfOldestMessage({
+        period: cdk.Duration.minutes(2),
+        statistic: "Maximum",
+        unit: cw.Unit.SECONDS,
+      });
+
+    ageOfMessagesMetric.createAlarm(this, "AgeOfMessagesInQueue", {
+      alarmName: "AgeOfMessagesInQueue",
+      actionsEnabled: false,
+      evaluationPeriods: 1,
+      threshold: 60,
+      comparisonOperator:
+        cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+    });
   }
 }
