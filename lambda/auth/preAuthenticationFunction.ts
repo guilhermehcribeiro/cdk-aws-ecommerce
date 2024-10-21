@@ -7,5 +7,9 @@ export async function handler(
 ) {
   console.log(event);
 
-  callback(null, event);
+  if (event.request.userAttributes.email === "teste@gmail.com") {
+    callback("USER BLOCKED!", event);
+  } else {
+    callback(null, event);
+  }
 }

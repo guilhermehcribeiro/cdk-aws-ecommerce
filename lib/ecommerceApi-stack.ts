@@ -4,6 +4,7 @@ import * as lambdaNodeJS from "aws-cdk-lib/aws-lambda-nodejs";
 import * as cwLogs from "aws-cdk-lib/aws-logs";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
 interface ECommerceApiStackProps extends cdk.StackProps {
@@ -16,6 +17,7 @@ interface ECommerceApiStackProps extends cdk.StackProps {
 export class ECommerceApiStack extends cdk.Stack {
   private productsAuthorizer: apiGateway.CognitoUserPoolsAuthorizer;
   private productsAdminAuthorizer: apiGateway.CognitoUserPoolsAuthorizer;
+  private ordersAuthorizer: apiGateway.CognitoUserPoolsAuthorizer;
   private customerPool: cognito.UserPool;
   private adminPool: cognito.UserPool;
 
@@ -43,6 +45,30 @@ export class ECommerceApiStack extends cdk.Stack {
       },
     });
     this.createCognitoAuth();
+
+    const adminUserPolicyStatement = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["cognito-idp:AdminGetUser"],
+      resources: [this.adminPool.userPoolArn],
+    });
+
+    const adminUserPolicy = new iam.Policy(this, "AdminGetUserPolicy", {
+      statements: [adminUserPolicyStatement],
+    });
+    adminUserPolicy.attachToRole(<iam.Role>props.productsAdminHandler.role);
+    adminUserPolicy.attachToRole(<iam.Role>props.ordersHandler.role);
+
+    const customerUserPolicyStatement = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["cognito-idp:AdminGetUser"],
+      resources: [this.adminPool.userPoolArn],
+    });
+
+    const customerUserPolicy = new iam.Policy(this, "CustomerGetUserPolicy", {
+      statements: [customerUserPolicyStatement],
+    });
+    customerUserPolicy.attachToRole(<iam.Role>props.ordersHandler.role);
+
     this.createProductsService(props, api);
     this.createOrderService(props, api);
   }
@@ -273,6 +299,15 @@ export class ECommerceApiStack extends cdk.Stack {
         cognitoUserPools: [this.adminPool],
       }
     );
+
+    this.ordersAuthorizer = new apiGateway.CognitoUserPoolsAuthorizer(
+      this,
+      "OrdersAuthorizer",
+      {
+        authorizerName: "OrdersAuthorizer",
+        cognitoUserPools: [this.customerPool, this.adminPool],
+      }
+    );
   }
   private createOrderService(
     props: ECommerceApiStackProps,
@@ -282,8 +317,24 @@ export class ECommerceApiStack extends cdk.Stack {
       props.ordersHandler
     );
 
+    const orderFetchWebMobileIntegrationOptions = {
+      authorizer: this.ordersAuthorizer,
+      authorizationType: apiGateway.AuthorizationType.COGNITO,
+      authorizationScopes: ["customer/web", "customer/mobile", "admin/web"],
+    };
+
+    const orderFetchWebIntegrationOptions = {
+      authorizer: this.ordersAuthorizer,
+      authorizationType: apiGateway.AuthorizationType.COGNITO,
+      authorizationScopes: ["customer/web", "admin/web"],
+    };
+
     const ordersResource = api.root.addResource("orders");
-    ordersResource.addMethod("GET", ordersIntegration);
+    ordersResource.addMethod(
+      "GET",
+      ordersIntegration,
+      orderFetchWebMobileIntegrationOptions
+    );
     const orderRequestValidator = new apiGateway.RequestValidator(
       this,
       "OrderRequestValidator",
@@ -299,9 +350,6 @@ export class ECommerceApiStack extends cdk.Stack {
       schema: {
         type: apiGateway.JsonSchemaType.OBJECT,
         properties: {
-          email: {
-            type: apiGateway.JsonSchemaType.STRING,
-          },
           productsIds: {
             type: apiGateway.JsonSchemaType.ARRAY,
             minItems: 1,
@@ -314,7 +362,7 @@ export class ECommerceApiStack extends cdk.Stack {
             enum: ["CASH", "DEBIT_CARD", "CREDIT_CARD"],
           },
         },
-        required: ["email", "productsIds", "payment"],
+        required: ["productsIds", "payment"],
       },
     });
     ordersResource.addMethod("POST", ordersIntegration, {
@@ -322,6 +370,7 @@ export class ECommerceApiStack extends cdk.Stack {
       requestModels: {
         "application/json": orderModel,
       },
+      ...orderFetchWebIntegrationOptions,
     });
 
     const orderDeleteValidation = new apiGateway.RequestValidator(
@@ -339,6 +388,7 @@ export class ECommerceApiStack extends cdk.Stack {
         "method.request.querystring.orderId": true,
       },
       requestValidator: orderDeleteValidation,
+      ...orderFetchWebIntegrationOptions,
     });
 
     const orderEventsResourse = ordersResource.addResource("events");
@@ -362,6 +412,7 @@ export class ECommerceApiStack extends cdk.Stack {
         "method.request.querystring.eventType": false,
       },
       requestValidator: orderEventsFetchValidator,
+      ...orderFetchWebMobileIntegrationOptions,
     });
   }
 

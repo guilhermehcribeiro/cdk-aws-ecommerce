@@ -115,6 +115,18 @@ export class OrdersAppStack extends cdk.Stack {
       productsLayerArn
     );
 
+    // Auth user ifnfo layer
+    const authUserInfoLayerArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      "AuthUserInfoLayerVersionArn"
+    );
+
+    const authUserInfoLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      "AuthUserInfoLayerVersionArn",
+      authUserInfoLayerArn
+    );
+
     const ordersTopic = new sns.Topic(this, "OrderEventsTopic", {
       displayName: "Order events topic",
       topicName: "order-events",
@@ -139,10 +151,16 @@ export class OrdersAppStack extends cdk.Stack {
           ORDER_EVENTS_TOPIC_ARN: ordersTopic.topicArn,
           AUDIT_BUS_NAME: props.auditBus.eventBusName,
         },
-        layers: [ordersLayer, productsLayer, ordersApiLayer, orderEventsLayer],
+        layers: [
+          ordersLayer,
+          productsLayer,
+          ordersApiLayer,
+          orderEventsLayer,
+          authUserInfoLayer,
+        ],
         runtime: lambda.Runtime.NODEJS_20_X,
         tracing: lambda.Tracing.ACTIVE,
-        insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
+        // insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,
       }
     );
 

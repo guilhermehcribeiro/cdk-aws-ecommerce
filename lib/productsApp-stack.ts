@@ -53,6 +53,18 @@ export class ProductsAppStack extends cdk.Stack {
       productEventsLayerArn
     );
 
+    // Auth user ifnfo layer
+    const authUserInfoLayerArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      "AuthUserInfoLayerVersionArn"
+    );
+
+    const authUserInfoLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      "AuthUserInfoLayerVersionArn",
+      authUserInfoLayerArn
+    );
+
     const productEventsDlq = new sqs.Queue(this, "ProductEventsDlq", {
       queueName: "product-events-dql",
       enforceSSL: false,
@@ -140,7 +152,7 @@ export class ProductsAppStack extends cdk.Stack {
           PRODUCTS_DDB: this.productsDdb.tableName,
           PRODUCT_EVENTS_FUNCTION_NAME: productEventsHandler.functionName,
         },
-        layers: [productsLayer, productEventsLayer],
+        layers: [productsLayer, productEventsLayer, authUserInfoLayer],
         runtime: lambda.Runtime.NODEJS_20_X,
         tracing: lambda.Tracing.ACTIVE,
         insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0,

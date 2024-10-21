@@ -1,4 +1,9 @@
-import { DynamoDB, EventBridge, SNS } from "aws-sdk";
+import {
+  CognitoIdentityServiceProvider,
+  DynamoDB,
+  EventBridge,
+  SNS,
+} from "aws-sdk";
 import { Order, OrderProduct, OrderRepository } from "/opt/nodejs/ordersLayer";
 import { Product, ProductRepository } from "/opt/nodejs/productsLayer";
 import {
@@ -22,6 +27,7 @@ import {
   ShippingType,
 } from "/opt/nodejs/ordersApiLayer";
 import { v4 as uuid } from "uuid";
+import { AuthInfoService } from "/opt/nodejs/authUserInfo";
 
 AWSXRay.captureAWS(require("aws-sdk"));
 
@@ -33,9 +39,11 @@ const auditBusName = process.env.AUDIT_BUS_NAME!;
 const ddbClient = new DynamoDB.DocumentClient();
 const snsClient = new SNS();
 const eventBridgeClient = new EventBridge();
+const cognitoIdentityServiceProvider = new CognitoIdentityServiceProvider();
 
 const orderRepository = new OrderRepository(ddbClient, ordersDdb);
 const productRepository = new ProductRepository(ddbClient, productsDdb);
+const authInfoService = new AuthInfoService(cognitoIdentityServiceProvider);
 
 export async function handler(
   event: APIGatewayProxyEvent,
@@ -49,12 +57,27 @@ export async function handler(
     `API Gateway RequestId: ${apiRequestId} - Lambda RequestId: ${lambdaRequestId}`
   );
 
+  const isUserAdmin = authInfoService.isAdminUser(
+    event.requestContext.authorizer
+  );
+  const authenticatedUserEmail = await authInfoService.getUserInfo(
+    event.requestContext.authorizer
+  );
+
   if (method === "GET") {
     let data: Order | Order[];
     if (event.queryStringParameters) {
       const email = event.queryStringParameters.email!;
       const orderId = event.queryStringParameters.orderId!;
 
+      if (!isUserAdmin && authenticatedUserEmail !== email) {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({
+            message: "You don't have permission to access this operation",
+          }),
+        };
+      }
       if (email && orderId) {
         try {
           data = await orderRepository.getOrder(email, orderId);
@@ -71,6 +94,14 @@ export async function handler(
         data = await orderRepository.getOrdersByEmail(email);
       }
     } else {
+      if (!isUserAdmin) {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({
+            message: "You don't have permission to access this operation",
+          }),
+        };
+      }
       data = await orderRepository.getAllOrders();
     }
 
@@ -85,6 +116,16 @@ export async function handler(
   } else if (method === "POST") {
     console.log("POST /orders");
     const orderRequest = JSON.parse(event.body!) as OrderRequest;
+    if (!isUserAdmin) {
+      orderRequest.email = authenticatedUserEmail;
+    } else if (!orderRequest.email) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          message: "Missing email order",
+        }),
+      };
+    }
     const products = await productRepository.getProductsByIds(
       orderRequest.productsIds
     );
@@ -143,6 +184,15 @@ export async function handler(
     console.log("DELETE /orders");
     const email = event.queryStringParameters!.email!;
     const orderId = event.queryStringParameters!.orderId!;
+
+    if (!isUserAdmin && authenticatedUserEmail !== email) {
+      return {
+        statusCode: 403,
+        body: JSON.stringify({
+          message: "You don't have permission to access this operation",
+        }),
+      };
+    }
 
     try {
       const deletedOrder = await orderRepository.deleteOrder(email, orderId);

@@ -3,10 +3,11 @@ import {
   APIGatewayProxyResult,
   Context,
 } from "aws-lambda";
-import { DynamoDB, Lambda } from "aws-sdk";
+import { CognitoIdentityServiceProvider, DynamoDB, Lambda } from "aws-sdk";
 import * as AWSXRay from "aws-xray-sdk";
 import { Product, ProductRepository } from "/opt/nodejs/productsLayer";
 import { ProductEvent, ProductEventType } from "/opt/nodejs/productEventsLayer";
+import { AuthInfoService } from "/opt/nodejs/authUserInfo";
 
 AWSXRay.captureAWS(require("aws-sdk"));
 
@@ -14,9 +15,11 @@ const productsDdb = process.env.PRODUCTS_DDB!;
 const productEventsFunctionName = process.env.PRODUCT_EVENTS_FUNCTION_NAME!;
 const ddbClient = new DynamoDB.DocumentClient();
 const lambdaClient = new Lambda();
+const cognitoIdentityServiceProvider = new CognitoIdentityServiceProvider();
 const productRepository = new ProductRepository(ddbClient, productsDdb);
 
-const userEmail = "teste@example.com";
+const authInfoService = new AuthInfoService(cognitoIdentityServiceProvider);
+
 export async function handler(
   event: APIGatewayProxyEvent,
   context: Context
@@ -29,6 +32,9 @@ export async function handler(
   );
 
   const method = event.httpMethod;
+  const userEmail = await authInfoService.getUserInfo(
+    event.requestContext.authorizer
+  );
 
   if (event.resource === "/products") {
     console.log("POST /products");
